@@ -4,20 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 
-import Calculator.PriorityStruct;
-import Calculator.OperationUtils;
 import Entities.Complex;
 import Entities.Pair;
 
 public class Operation extends Thread {
-    private ArrayList<Thread> childrenThreads = new ArrayList<>();
+    private final ArrayList<Thread> childrenThreads = new ArrayList<>();
     private String sequence;
-    private ArrayList<PriorityStruct<String,String,Integer>> priorityList = new ArrayList<>();
     private List<String> results;
-    private String opResult;
-    private int maxWeight = 0;
+    private String currentResult;
 
-    public Operation(String sequence, List<String> results, boolean itsCorrectOperation) {
+    public Operation(String sequence, List<String> results, boolean itsCorrectOperation){
         this.sequence = sequence;
         this.results = results;
         if (!itsCorrectOperation){
@@ -30,15 +26,19 @@ public class Operation extends Thread {
     public void run() {
         try {
             this.calculate();
-        } catch (InterruptedException e) {
-            System.out.println(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.out.println(this.getName()+": "+e.getMessage());
+        }
+        catch (Exception e) {
+            System.out.println(this.getName()+": An unexpected exception has occurred");
             e.printStackTrace();
         }
     }
 
     private void splitSequence() {
+        sequence = sequence.replaceAll("\\s", "");
         checkParentheses();
-        String regex = "x|\\+|\\-|\\/|\\^|\\(|\\)";
+        String regex = "[x+\\-/^()]";
         for (String part : sequence.split(regex)) {
             if (!isCorrectNumber(part.trim()))
                 throw new IllegalArgumentException("There is a part of the operation that is not valid. <<"+part.trim()+">>");
@@ -49,13 +49,13 @@ public class Operation extends Thread {
         int counterParentheses = 0;
         boolean firts = true;
         for (int i = 0; i < this.sequence.length(); i++) {
-            if (this.sequence.charAt(i) == '('){
+            if (this.sequence.charAt(i) == '(') {
                 counterParentheses++;
                 firts = false;
             }
-            else if (this.sequence.charAt(i) == ')'){
+            else if (this.sequence.charAt(i) == ')') {
                 counterParentheses--;
-                if (firts){
+                if (firts) {
                     counterParentheses = -1;
                     break;
                 }
@@ -65,14 +65,14 @@ public class Operation extends Thread {
         if (counterParentheses != 0) 
             throw new IllegalArgumentException("The operation does not have the parentheses correctly placed.");
         for (int i = this.sequence.length()-1; i >= 0 ; i--) {
-            if (this.sequence.charAt(i) == '('){
+            if (this.sequence.charAt(i) == '(') {
                 counterParentheses++;
                 if (firts){
                     counterParentheses = -1;
                     break;
                 }
             }
-            else if (this.sequence.charAt(i) == ')'){
+            else if (this.sequence.charAt(i) == ')') {
                 counterParentheses--;
                 firts = false;
             }
@@ -88,9 +88,7 @@ public class Operation extends Thread {
             return true;
         else if (Complex.isComplex(part))
             return true;
-        else if (part.equals("")) //space between operators
-            return true;
-        return false;
+        else return part.equals("");
     }
     
     private void invalidTokens() { 
@@ -102,12 +100,12 @@ public class Operation extends Thread {
         char init = this.sequence.charAt(0);
         char fin = this.sequence.charAt(this.sequence.length()-1);
         if (init == '/' || init == 'x' || init =='^')
-            throw new IllegalArgumentException("The operator <<"+init+">> , can't be at start");
+            throw new IllegalArgumentException("The operator <<"+init+">> , takes two arguments");
         if (fin == '/' || fin == 'x' || fin =='^' || fin =='+' || fin =='-')
-            throw new IllegalArgumentException("The operator <<"+fin+">> , can't be at the end");
+            throw new IllegalArgumentException("The operator <<"+fin+">> , takes two arguments");
     }
 
-    private void separateByPriority(String sequence, int weight) {
+    private String separateByPriority(String sequence) {
         boolean record = false;
         int count1 = 0;
         int count2 = 0;
@@ -125,16 +123,16 @@ public class Operation extends Thread {
                         record = false;
                         count1 = 0;
                         count2 = 0;
-                        this.priorityList.add(new PriorityStruct<String,String,Integer>(subSequence,subSequence,weight));
-                        if (this.maxWeight <= weight)
-                            this.maxWeight = weight;
-                        subSequence = subSequence.substring(1, subSequence.length() - 1); //critic
-                        separateByPriority(subSequence, weight+1);
-                        subSequence = "";
+                        subSequence = subSequence.substring(1, subSequence.length() - 1);
+                        while (subSequence.contains("(")){
+                            subSequence = separateByPriority(subSequence);
+                        } 
+                        return subSequence;
                     }
                 }
             }
         }
+        return sequence;
     }
     
     private String refactorSequence(String sequence) {
@@ -171,38 +169,36 @@ public class Operation extends Thread {
     }
     
     public String getResult() {
-        return this.opResult;
+        return this.currentResult;
     } 
     
-    private void calculate() throws InterruptedException {
+    private void calculate() {
         this.sequence = refactorSequence(this.sequence);
-        this.opResult = this.sequence;
-        System.out.println(this.sequence);
-        separateByPriority(this.sequence,0);
-        for (PriorityStruct<String,String,Integer> s : this.priorityList) {
-            System.out.println("Prioridad: "+s.getFirst()+"  Peso: "+s.getThird());
+        this.currentResult = this.sequence;
+        System.out.println(this.getName()+": Starting thread calculation with this sequence: "+ this.sequence);
+        String  prioritySequence;
+        String  prioritySequenceID;
+        String partialResult;
+        while (this.currentResult.contains("(")) {
+            prioritySequence = separateByPriority(this.currentResult);
+            prioritySequenceID = new String("("+prioritySequence+")");
+            partialResult = solve(prioritySequence);
+            this.currentResult = this.currentResult.replace(prioritySequenceID, partialResult);
         }
-        for(int i = this.maxWeight; i >= 0; i--){
-            solveAll(i);
-            replaceAll(i-1);
+        this.currentResult = signRefactor(this.currentResult);
+        System.out.println("========================");
+        this.currentResult = result(this.currentResult);
+        String possibleComplex = OperationUtils.obtenerSubstringEntreTokens(this.currentResult,'$','$');
+        if (this.currentResult.contains("-$")) {
+            Complex c1 = new Complex(possibleComplex);
+            possibleComplex = c1.multiScalar(-1).toString();
         }
-        this.opResult = signRefactor(this.opResult);
-        this.opResult = result(this.opResult);
-        String complex = obtenerSubstringEntreTokens(this.opResult,'$','$');
-
-        if (this.opResult.contains("-$")) {
-            Complex c1 = new Complex(complex);
-            complex = c1.multiScalar(-1).toString();
-        }
-
-        this.opResult = complex;
-
-        for (PriorityStruct<String,String,Integer> s : this.priorityList) {
-            System.out.println("Prioridad: "+s.getFirst()+" Resuelto: "+s.getSecond()+" Peso: "+s.getThird());
-        }
+        this.currentResult = possibleComplex;
 
         synchronized(results) {
-            this.results.add(this.opResult);
+            if (!results.contains(currentResult)) {
+                this.results.add(this.currentResult);
+            }
         }
 
         for (Thread thread : childrenThreads) {
@@ -213,58 +209,23 @@ public class Operation extends Thread {
                 e.printStackTrace();
             }
         }
-        System.out.println("Fin de todos los hilos");
+
+        System.out.println(this.getName()+": End of thread");
     }
     
-    // PriorityStruct<originalSequence,solveSequence,weight>
-    private void solveAll(int weight) {
-        for (PriorityStruct<String,String,Integer> sequence : this.priorityList) {
-            if (sequence.getThird() == weight) {
-                sequence.setSecond(solve(sequence.getSecond()));
-            }
-        }
-    }
-
-    private void replaceAll(int weight) {
-        ArrayList<Pair<String,String>> tempList = new ArrayList<>();
-        for (PriorityStruct<String,String,Integer> sequence : this.priorityList) {
-            if (sequence.getThird() == (weight+1)) { //source
-                tempList.add(new Pair<String,String>(sequence.getFirst(),sequence.getSecond()));//regex, alreadysolved
-            }
-        }
-        if (weight == -1) {
-            //final replace
-            for (Pair<String,String>  temp: tempList) {
-                this.opResult = this.opResult.replace(temp.getX(),temp.getY());
-            }
-            return;
-        }
-        for (PriorityStruct<String,String,Integer> sequence : this.priorityList) {
-            if (sequence.getThird() == weight) { //target
-                System.out.println("Remplace in this sequence: "+ sequence.getFirst());
-                System.out.println("<<"+sequence.getSecond()+">>");
-                for (Pair<String,String>  temp: tempList) {
-                    if (sequence.getSecond().contains(temp.getX()))
-                        sequence.setSecond(sequence.getSecond().replace(temp.getX(),temp.getY())); //ready to solve and new loop
-                }
-                System.out.println("<<"+sequence.getSecond()+">>");
-            }
-        }
-
-    }
-
     //aqui va la magia
     private String solve(String sequence) {
         //from this point the sequence is a line of basic operations -a+bxc/d
-        //this sequence comes with parentheses ("a+b") //served as regex to replace, now not useful
+        //this sequence comes with parentheses ("a+b")
         System.out.println("========================");
-        sequence = obtenerSubstringEntreTokens(sequence, '(',')');
-        
+        sequence = OperationUtils.obtenerSubstringEntreTokens(sequence, '(',')');
         sequence = signRefactor(sequence);
-        System.out.println("Sequence in solve: " + sequence );
-        System.out.println("========================");
-        if (Complex.isComplex(sequence) && !OperationUtils.isReal(sequence))
+        System.out.println(this.getName()+": Sequence in solve: " + sequence );
+        if (Complex.isComplex(sequence) && !OperationUtils.isReal(sequence)) {
+            System.out.println(this.getName()+": Operating this math problem: ["+sequence+" = "+sequence+"]");
+            System.out.println("========================");
             return "$"+sequence+"$"; //treat as monary, with token $ defined
+        }
         else 
             return result(sequence);
     }
@@ -285,13 +246,14 @@ public class Operation extends Thread {
         String result = listParts.get(0);
         if (Complex.isComplex(result) && !OperationUtils.isReal(result))
             result = new String("$"+result+"$");
+        System.out.println("========================");
         return result;
     }
 
     private ArrayList<String> splitLiteSequence(String sequence) {
         ArrayList<String> listParts = new ArrayList<>();
         char operator = '\0';
-        String part = "";
+        StringBuilder part = new StringBuilder();
         boolean imaToken = false;
         boolean record = true;
         for (int i = 0; i < sequence.length(); i++) {
@@ -301,7 +263,7 @@ public class Operation extends Thread {
             if (!imaToken) {
                 if (i == 0 && (currentChar == '-' || currentChar == '+'))
                     record = true;
-                else if (part != "" && (currentChar == '-' || currentChar == '+' || currentChar == '^' || currentChar == '/' || currentChar == 'x')) {
+                else if (!part.toString().equals("") && (currentChar == '-' || currentChar == '+' || currentChar == '^' || currentChar == '/' || currentChar == 'x')) {
                     operator = currentChar;
                     record = false;
                 }
@@ -313,27 +275,24 @@ public class Operation extends Thread {
     
             //record
             if (record) {
-                part+=String.valueOf(currentChar);
+                part.append(String.valueOf(currentChar));
             }
             else{
-                listParts.add(part);
-                part = "";
+                listParts.add(part.toString());
+                part = new StringBuilder();
             }
             if (operator != '\0'){
                 listParts.add(String.valueOf(operator));
                 operator = '\0';
             }
         }
-        listParts.add(part);
+        listParts.add(part.toString());
         return listParts;
     }
     
     private void operate(ArrayList<String> lisPart) {
         //$a+bi$ y ai
         while (lisPart.contains("^")) {
-            //System.out.println("paso ^");
-            //TODO: complex elevado a double e integer o duble menor a 1 y mayor a cero retorna una lista de complex
-            //TODO: inicar hilos q calculen el resultado de todos los posibles resultados;
             int k = getIndexFirstOccurrence(lisPart,"^","nan");
             String p = power(lisPart.get(k-1),lisPart.get(k+1));
             lisPart.remove(k-1);
@@ -345,7 +304,6 @@ public class Operation extends Thread {
                 lisPart.add(k-1, p);
         }
         while (lisPart.contains("x") || lisPart.contains("/")) {
-            //System.out.println("paso x o /");
             int k = getIndexFirstOccurrence(lisPart,"x","/");
             String p = "NaN";
             if (lisPart.get(k).equals("x"))
@@ -361,7 +319,6 @@ public class Operation extends Thread {
                 lisPart.add(k-1, p);
         }
         while (lisPart.contains("-") || lisPart.contains("+")) {
-            //System.out.println("paso + o -");
             int k = getIndexFirstOccurrence(lisPart,"+","-");
             String p = "NaN";
             if (lisPart.get(k).equals("+"))
@@ -376,14 +333,6 @@ public class Operation extends Thread {
             else
                 lisPart.add(k-1, p);
         }
-        
-        //Luego de la resolusion
-        /* 
-        System.out.println("==========");
-        for (String s: lisPart) {
-            System.out.println(s);
-        }
-        System.out.println("==========");*/
     }
 
     private int getIndexFirstOccurrence(ArrayList<String> lisPart, String op1, String op2){
@@ -399,57 +348,16 @@ public class Operation extends Thread {
         return index;
     }
     
-    public String obtenerSubstringEntreTokens(String cadena, char token1, char token2) {
-        int inicio = cadena.indexOf(token1);
-        if (inicio == -1)
-            return cadena;
-        inicio++;
-        int fin = cadena.indexOf(token2, inicio);
-        if (fin == -1) 
-            return cadena;
-        return cadena.substring(inicio, fin);
-    }
-
-    //funciones aritmeticas
 
     public String power(String a ,String b) {
         String result = "NaN";
-        String trace = "undifined";
-        if (a.contains("i") || a.contains("j") || b.contains("j") || b.contains("i")) {
-            String subA = obtenerSubstringEntreTokens(a,'$','$');
-            String subB = obtenerSubstringEntreTokens(b,'$','$');
-            trace = subA+"^"+subB;
-            Complex aC = new Complex(subA);
-            if (a.contains("-$"))
-                aC=aC.multiScalar(-1);
-            if (b.contains("i")) {
-                Complex bC = new Complex(subB);
-                if (b.contains("-$"))
-                    bC=bC.multiScalar(-1);
-                result = aC.power(bC).toString();
-            }
-            else {
-                Integer denominator = OperationUtils.isRationalInverse(subB);
-                if (denominator != null){
-                    System.out.println(denominator);
-                    Vector<Complex> vectorC = aC.root(denominator);
-                    for (Complex c : vectorC) {
-                        System.out.println("Complex root: "+ c.toString());
-                    }
-                    result = vectorC.get(0).toString();
-                }
-                else{
-                    Complex bC = new Complex(subB);
-                    if (b.contains("-$"))
-                        bC=bC.multiScalar(-1);
-                    result = aC.power(bC).toString();
-                }
-            }
-        }
-        else {
+        String trace = a+"^"+b;
+        String subA = OperationUtils.obtenerSubstringEntreTokens(a,'$','$');
+        String subB = OperationUtils.obtenerSubstringEntreTokens(b,'$','$');
+        if (OperationUtils.isReal(a) && OperationUtils.isReal(b)) {
             trace = a+"^"+b;
-            double aD = parseDouble(a);
-            double bD = parseDouble(b);
+            double aD = Double.parseDouble(a);
+            double bD = Double.parseDouble(b);
             result = String.valueOf(Math.pow(aD, bD));
             if (result.equals("NaN")) {
                 Complex aC = new Complex(a);
@@ -457,17 +365,82 @@ public class Operation extends Thread {
                 result = aC.power(bC).toString();
             }
         }
+        else if (Complex.isComplex(subA)) {
+            trace = subA+"^"+b;
+            Complex aC = new Complex(subA);
+            if (a.contains("-$"))
+                aC=aC.multiScalar(-1);
+
+            if (OperationUtils.isInteger(b)) {
+                result = aC.power(Integer.parseInt(b)).toString();
+            }
+            else if (OperationUtils.isReal(b)) {
+                Pair<Integer, Integer> fraction = OperationUtils.Rational(b);
+                if (fraction != null) {
+                    String id = a + "^" + b;
+                    Vector<Complex> vectorC = aC.power(fraction.getX(), fraction.getY());
+                    String newSequence;
+                    for (Complex complex : vectorC) {
+                        System.out.println(this.getName() + ": Complex root: " + complex.toString());
+                    }
+                    for (int i = 1; i < vectorC.size(); i++) {
+                        newSequence = this.currentResult;
+                        Operation subOperation = new Operation(newSequence.replace(id, "$" + vectorC.get(i).toString() + "$"), this.results, true);
+                        this.childrenThreads.add(subOperation);
+                        subOperation.start();
+                    }
+                    if (vectorC.size() != 0)
+                        result = vectorC.get(0).toString();
+                    else
+                        result = "NaN";
+                } else {
+                    Complex bC = new Complex(b);
+                    result = aC.power(bC).toString();
+                }
+            }
+            else if (Complex.isComplex(subB)) {
+                trace = subA+"^"+subB;
+                Complex bC = new Complex(subB);
+                if (b.contains("-$"))
+                    bC=bC.multiScalar(-1);
+                result = aC.power(bC).toString();
+            }
+        }
+        else if (Complex.isComplex(subB)) {
+            Complex aC = new Complex(a);
+            Complex bC = new Complex(subB);
+            if (b.contains("-$"))
+                bC=bC.multiScalar(-1);
+            trace = a+"^"+subB;
+            result = aC.power(bC).toString();
+        }
+        
         if (result.equals("NaN")) 
             throw new IllegalArgumentException("The result of a part of the operation is not a valid number. <<"+trace+">>");
+        else
+            System.out.println(this.getName()+": Operating this math problem: ["+trace+" = "+result+"]");
         return result;
     }
 
     private String multi(String a ,String b) {
         String result = "NaN";
-        String trace = "undifined";
-        if (a.contains("i") || a.contains("j") || b.contains("j") || b.contains("i")) {
-            String subA = obtenerSubstringEntreTokens(a,'$','$');
-            String subB = obtenerSubstringEntreTokens(b,'$','$');
+        String trace = a+"x"+b;
+        String subA = OperationUtils.obtenerSubstringEntreTokens(a,'$','$');
+        String subB = OperationUtils.obtenerSubstringEntreTokens(b,'$','$');
+
+        if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
+            trace = a+"x"+b;
+            int aI = Integer.parseInt(a);
+            int bI = Integer.parseInt(b);
+            result = String.valueOf(aI*bI);
+        }
+        else if (OperationUtils.isReal(a) && OperationUtils.isReal(b)){
+            trace = a+"x"+b;
+            double aD = Double.parseDouble(a);
+            double bD = Double.parseDouble(b);
+            result = String.valueOf(aD*bD);
+        }
+        else if (Complex.isComplex(subA) && Complex.isComplex(subB)) {
             trace = subA + "x"+ subB;
             Complex aC = new Complex(subA);
             Complex bC = new Complex(subB);
@@ -477,31 +450,33 @@ public class Operation extends Thread {
                 bC=bC.multiScalar(-1);
             result = aC.multi(bC).toString();
         }
-        else if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
-            trace = a+"x"+b;
-            int aI = parseInt(a);
-            int bI = parseInt(b);
-            result = String.valueOf(aI*bI);
-        }
-        else {
-            trace = a+"x"+b;
-            double aD = parseDouble(a);
-            double bD = parseDouble(b);
-            result = String.valueOf(aD*bD);
-        }
 
         if (result.equals("NaN")) 
             throw new IllegalArgumentException("The result of a part of the operation is not a valid number. <<"+trace+">>");
+        else
+            System.out.println(this.getName()+": Operating this math problem: ["+trace+" = "+result+"]");
         return result;
     }
 
     private String divide(String a ,String b) {
         String result = "NaN";
-        String trace = "undifined";
+        String trace = a+"/"+b;
+        String subA = OperationUtils.obtenerSubstringEntreTokens(a,'$','$');
+        String subB = OperationUtils.obtenerSubstringEntreTokens(b,'$','$');
 
-        if (a.contains("i") || a.contains("j") || b.contains("j") || b.contains("i")) {
-            String subA = obtenerSubstringEntreTokens(a,'$','$');
-            String subB = obtenerSubstringEntreTokens(b,'$','$');
+        if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
+            trace = a+"/"+b;
+            int aI = Integer.parseInt(a);
+            int bI = Integer.parseInt(b);
+            result = String.valueOf(aI/(1.0*bI));
+        }
+        else if (OperationUtils.isReal(a) && OperationUtils.isReal(b)) {
+            trace = a+"/"+b;
+            double aD = Double.parseDouble(a);
+            double bD = Double.parseDouble(b);
+            result = String.valueOf(aD/bD);
+        }
+        else if (Complex.isComplex(subA) && Complex.isComplex(subB)) {
             trace = subA + "/"+ subB;
             Complex aC = new Complex(subA);
             Complex bC = new Complex(subB);
@@ -513,37 +488,37 @@ public class Operation extends Thread {
                 result = aC.divide(bC).toString();
             }
             catch (IllegalArgumentException e){
+                System.out.println("ACaasasasdasdd");
                 result = "NaN";
             }
-        }
-        else if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
-            trace = a+"/"+b;
-            int aI = parseInt(a);
-            int bI = parseInt(b);
-            if (bI==0)
-                result = "NaN"; //o infinite, dependeria como no quiero hacerme bolas lo dejo en nan
-            else
-                result = String.valueOf((1.0*aI)/bI);
-        }
-        else {
-            trace = a+"/"+b;
-            double aD = parseDouble(a);
-            double bD = parseDouble(b);
-            result = String.valueOf(aD/bD);
         }
 
         if (result.equals("NaN")) 
             throw new IllegalArgumentException("The result of a part of the operation is not a valid number. <<"+trace+">>");
+        else
+            System.out.println(this.getName()+": Operating this math problem: ["+trace+" = "+result+"]");
         return result;
     }
 
     private String add(String a ,String b) {
         String result = "NaN";
-        String trace = "undifined";
+        String trace = a+"+"+b;
+        String subA = OperationUtils.obtenerSubstringEntreTokens(a,'$','$');
+        String subB = OperationUtils.obtenerSubstringEntreTokens(b,'$','$');
 
-        if (a.contains("i") || a.contains("j") || b.contains("j") || b.contains("i")) {
-            String subA = obtenerSubstringEntreTokens(a,'$','$');
-            String subB = obtenerSubstringEntreTokens(b,'$','$');
+        if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
+            trace = a+"+"+b;
+            int aI = Integer.parseInt(a);
+            int bI = Integer.parseInt(b);
+            result = String.valueOf(aI+bI);
+        }
+        else if (OperationUtils.isReal(a) && OperationUtils.isReal(b)) {
+            trace = a+"+"+b;
+            double aD = Double.parseDouble(a);
+            double bD = Double.parseDouble(b);
+            result = String.valueOf(aD+bD);
+        }
+        else if (Complex.isComplex(subA) && Complex.isComplex(subB) ) {
             trace = subA+"+"+subB;
             Complex aC = new Complex(subA);
             Complex bC = new Complex(subB);
@@ -553,30 +528,32 @@ public class Operation extends Thread {
                 bC=bC.multiScalar(-1);
             result = aC.add(bC).toString();
         }
-        else if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
-            trace = a+"+"+b;
-            int aI = parseInt(a);
-            int bI = parseInt(b);
-            result = String.valueOf(aI+bI);
-        }
-        else {
-            trace = a+"+"+b;
-            double aD = parseDouble(a);
-            double bD = parseDouble(b);
-            result = String.valueOf(aD+bD);
-        }
-    
+
         if (result.equals("NaN")) 
             throw new IllegalArgumentException("The result of a part of the operation is not a valid number. <<"+trace+">>");
+        else
+            System.out.println(this.getName()+": Operating this math problem: ["+trace+" = "+result+"]");
         return result;
     }
 
     private String sub(String a ,String b) {
         String result = "NaN";
-        String trace = "undifined";
-        if (a.contains("i") || a.contains("j") || b.contains("j") || b.contains("i")) {
-            String subA = obtenerSubstringEntreTokens(a,'$','$');
-            String subB = obtenerSubstringEntreTokens(b,'$','$');
+        String trace = a+"-"+b;
+        String subA = OperationUtils.obtenerSubstringEntreTokens(a,'$','$');
+        String subB = OperationUtils.obtenerSubstringEntreTokens(b,'$','$');
+        if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
+            trace = a+"-"+b;
+            int aI = Integer.parseInt(a);
+            int bI = Integer.parseInt(b);
+            result = String.valueOf(aI-bI);
+        }
+        else if (OperationUtils.isReal(a) && OperationUtils.isReal(b)) {
+            trace = a+"-"+b;
+            double aD = Double.parseDouble(a);
+            double bD = Double.parseDouble(b);
+            result = String.valueOf(aD-bD);
+        }
+        else if (Complex.isComplex(subA) && Complex.isComplex(subB)) {
             trace = subA+"-"+subB;
             Complex aC = new Complex(subA);
             Complex bC = new Complex(subB);
@@ -586,47 +563,11 @@ public class Operation extends Thread {
                 bC=bC.multiScalar(-1);
             result = aC.sub(bC).toString();
         }
-        else if (OperationUtils.isInteger(a) && OperationUtils.isInteger(b)) {
-            trace = a+"-"+b;
-            int aI = parseInt(a);
-            int bI = parseInt(b);
-            result = String.valueOf(aI-bI);
-        }
-        else {
-            trace = a+"-"+b;
-            double aD = parseDouble(a);
-            double bD = parseDouble(b);
-            result = String.valueOf(aD-bD);
-        }
-    
+
         if (result.equals("NaN")) 
             throw new IllegalArgumentException("The result of a part of the operation is not a valid number. <<"+trace+">>");
+        else
+            System.out.println(this.getName()+": Operating this math problem: ["+trace+" = "+result+"]");
         return result;
-    }
-
-    private int parseInt(String a) {
-        try {
-            int aI = Integer.parseInt(a);
-            return aI;
-        }
-        catch (NumberFormatException e) {
-            throw new IllegalArgumentException("A part of the operation does not have the correct integer format. <<"+a+">>");
-        }
-        catch (NullPointerException e) {
-            throw new IllegalArgumentException("A part of the operation does not exist. <<"+a+">>");
-        }
-    }
-
-    private double parseDouble(String a) {
-        try {
-            double aD = Double.parseDouble(a);
-            return aD;
-        }
-        catch (NumberFormatException e) {
-            throw new IllegalArgumentException("A part of the operation does not have the correct real format. <<"+a+">>");
-        }
-        catch (NullPointerException e) {
-            throw new IllegalArgumentException("A part of the operation does not exist. <<"+a+">>");
-        }
     }
 }

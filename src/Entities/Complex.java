@@ -16,9 +16,9 @@ public class Complex {
     private String strComplex;
     private Double partReal = 0.0;
     private Double partImg = 0.0;
-    private Double radius;
+    private final Double radius;
     private Double angle;
-    private String quadrant;
+    private final String quadrant;
     private final HashMap<Integer,Double> system = new HashMap<Integer,Double>() {{
         put(0,1.0);
         put(1,0.017453292519943295); //DEGREES_TO_RADIANS
@@ -38,7 +38,7 @@ public class Complex {
     }
 
     public Complex(String complex) {
-        complex = complex.strip();
+        complex = complex.trim();
         boolean valid = isComplex(complex);
         if(valid) {
             this.strComplex = complex;
@@ -214,9 +214,9 @@ public class Complex {
     public static boolean isComplex(String complex) {
         if (complex.equals(""))
             return false;
-        Pattern pattern = Pattern.compile("^([-+]?\\d+(\\.\\d+)?)?([-+]?(\\d+(\\.\\d+)?)?[ij])?$"); //the best complex regular expression, made by me XD
+        Pattern pattern = Pattern.compile("^([-+]?\\d+(\\.\\d+)?)?([-+]?(\\d+(\\.\\d+)?)?[ij])?$");
         Matcher match = pattern.matcher(complex);
-        Pattern helpPattern = Pattern.compile("^[+-]?\\d+\\.\\d+\\.\\d+[ij]$"); //the only exception XD'nt
+        Pattern helpPattern = Pattern.compile("^[+-]?\\d+\\.\\d+\\.\\d+[ij]$");
         Matcher helpMatch = helpPattern.matcher(complex);
 
         Pattern reversePattern = Pattern.compile("^([-+]?(\\d+(\\.\\d+)?)?[ij])?([-+]?\\d+(\\.\\d+)?)?$");
@@ -306,13 +306,8 @@ public class Complex {
         double real = 0, img = 0;
         double d1 = c.partReal, d2 = c.partImg;
         double denominator = d1 * d1 + d2 * d2;
-        if (denominator != 0) {
-            real = (this.partReal*d1 + this.partImg*d2) / denominator;
-            img = (this.partImg*d1 - this.partReal*d2) / denominator;
-        }
-        else {
-            throw new IllegalArgumentException("Division by zero");
-        }
+        real = (this.partReal*d1 + this.partImg*d2) / (1.0*denominator);
+        img = (this.partImg*d1 - this.partReal*d2) / (1.0*denominator);
         return new Complex(real, img);
     }
 
@@ -383,5 +378,13 @@ public class Complex {
     public Vector<Complex> root(Complex index){
         Vector<Complex> rootListComplex = new Vector<Complex>();
         return rootListComplex;
+    }
+
+    public static String format(Complex c, String format){
+        String partReal = String.format(format, c.getPartReal());
+        double pI = c.getPartImg();
+        String partImg = String.format(format, c.getPartImg());
+        String operator = Double.compare(pI, 0.0) < 0 ? "" : "+";
+        return partReal+operator+partImg+"i";
     }
 }  

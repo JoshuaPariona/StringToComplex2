@@ -1,6 +1,7 @@
 package Calculator;
 
 import java.util.regex.Pattern;
+import Entities.Pair;
 
 public class OperationUtils {
     public static boolean isInteger(String integer) {
@@ -10,21 +11,40 @@ public class OperationUtils {
 
     public static boolean isReal(String real) {
         Pattern pattern = Pattern.compile("^[-+]?\\d*\\.?\\d+$");
-        return pattern.matcher(real).matches();
+        if (pattern.matcher(real).matches())
+            return true;
+        pattern = Pattern.compile("^[+-]?\\d+(\\.\\d+)?([Ee][+-]?\\d+)?$");
+        if (pattern.matcher(real).matches())
+            return true;
+        return (real.equals("Infinity") || real.equals("infinity") || real.equals("NaN"));
     }
 
-    public static Integer isRationalInverse(String d) {
+    public static String obtenerSubstringEntreTokens(String cadena, char token1, char token2) {
+        int inicio = cadena.indexOf(token1);
+        if (inicio == -1)
+            return cadena;
+        inicio++;
+        int fin = cadena.indexOf(token2, inicio);
+        if (fin == -1) 
+            return cadena;
+        return cadena.substring(inicio, fin);
+    }
+
+    public static Pair<Integer,Integer> Rational(String d) {
         String f;
+        String format = "%.5f";
         double valor = Double.parseDouble(d);
-        d = String.format("%.5f",valor);
-        for (int i = 2; i <= 40; i++) {
-            f = String.format("%.5f", 1.0/i);
-            if (d.equals(f))
-                return i;
-            f = String.format("%.5f", -1.0/i);
-            if (d.equals(f))
-                return -i;
-        } 
+        d = String.format(format,valor);
+        for (int i = 1; i <= 40; i++) {
+            for (int j = 2; j <= 50; j++) {
+                f = String.format(format, 1.0*i/j);
+                if (d.equals(f))
+                    return new Pair<Integer,Integer>(i,j);
+                f = String.format(format, -1.0*i/j);
+                if (d.equals(f))
+                    return new Pair<Integer,Integer>(i,-j);
+            } 
+        }
         return null;
     }
 }
