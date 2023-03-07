@@ -5,6 +5,8 @@ import Entities.Pair;
 
 public class OperationUtils {
     public static boolean isInteger(String integer) {
+        if (integer.length() > String.valueOf(Integer.MAX_VALUE).length())
+            return false;
         Pattern pattern = Pattern.compile("^[-+]?\\d+$");
         return pattern.matcher(integer).matches();
     }
@@ -16,7 +18,14 @@ public class OperationUtils {
         pattern = Pattern.compile("^[+-]?\\d+(\\.\\d+)?([Ee][+-]?\\d+)?$");
         if (pattern.matcher(real).matches())
             return true;
-        return (real.equals("Infinity") || real.equals("infinity") || real.equals("NaN"));
+        if (real.equals("Infinity") || real.equals("infinity") || real.equals("NaN"))
+            return true;
+        try {
+            double d = Double.parseDouble(real);
+            return d <= Double.MAX_VALUE && d >= Double.MIN_VALUE;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     public static String obtenerSubstringEntreTokens(String cadena, char token1, char token2) {
