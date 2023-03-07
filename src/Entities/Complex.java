@@ -375,12 +375,13 @@ public class Complex {
     }
 
     //TODO:
-    public Vector<Complex> root(Complex index){
+    public Vector<Complex> root(Complex index) {
         Vector<Complex> rootListComplex = new Vector<Complex>();
         return rootListComplex;
     }
 
-    public static String format(Complex c, String format){
+    public static String format(Complex c, String format) {
+        //TODO: comas en miles
         String partReal = String.format(format, c.getPartReal());
         double pI = c.getPartImg();
         String partImg = String.format(format, c.getPartImg());
