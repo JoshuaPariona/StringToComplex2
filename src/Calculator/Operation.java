@@ -140,13 +140,12 @@ public class Operation extends Thread {
         for (int i = 0; i < sequence.length(); i++) {
             if (sequence.charAt(i) == '(') {
                 if (i > 0) {
-                    int currentLen = sequence.length();
                     if (sequence.charAt(i-1) == ')')
-                        sequence = new String(sequence.substring(0,i)+"x"+sequence.substring(i,currentLen));
+                        sequence = priorityRefactor(sequence,i);
                     else if (sequence.charAt(i-1) == 'i' || sequence.charAt(i-1) == 'j')
-                        sequence = new String(sequence.substring(0,i)+"x"+sequence.substring(i,currentLen));
+                        sequence = priorityRefactor(sequence,i);
                     else if (OperationUtils.isInteger(String.valueOf(sequence.charAt(i-1))))
-                        sequence = new String(sequence.substring(0,i)+"x"+sequence.substring(i,currentLen));
+                        sequence = priorityRefactor(sequence,i);
                 }
             }
             else if (sequence.charAt(i) == ')') {
@@ -237,6 +236,48 @@ public class Operation extends Thread {
             sequence = sequence.replaceAll("\\-\\+", "-");
             sequence = sequence.replaceAll("\\+\\-", "-");
         }
+        return sequence;
+    }
+
+    private String priorityRefactor(String sequence, int index) {
+        sequence = new String(sequence.substring(0,index)+"x"+sequence.substring(index,sequence.length()));
+        int countA = 0;
+        int countB = 0;
+        int fin = sequence.length();
+        int ini = 0;
+        for (int i = index+1 ; i < sequence.length(); i++) {
+            if (sequence.charAt(i) == '(')
+                countA ++;
+            else if (sequence.charAt(i) == ')') {
+                countB ++;
+                if (countA == countB) {
+                    fin = i;
+                    break;
+                }
+            }
+        }
+        if (sequence.charAt(index-1)==')') {
+            for (int i = index-1 ; i >= 0; i--) {
+                if (sequence.charAt(i) == ')')
+                    countA ++;
+                else if (sequence.charAt(i) == '(') {
+                    countB ++;
+                    if (countA == countB) {
+                        ini = i;
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            for (int i = index-1 ; i >= 0; i--) {
+                if (sequence.charAt(i) == '^' || sequence.charAt(i) == 'x' || sequence.charAt(i) == '/' || sequence.charAt(i) == '+' || sequence.charAt(i) == '-'){
+                    ini = i;
+                    break;
+                } 
+            }
+        }
+        sequence = new String(sequence.substring(0, ini+1)+"("+sequence.substring(ini+1, fin+1)+")"+sequence.substring(fin+1,sequence.length()));
         return sequence;
     }
 
